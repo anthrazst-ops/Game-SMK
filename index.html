@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operasi Integritas - Hardcore Tactical RPG</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700;900&display=swap');
+
+        :root {
+            /* Hardcore Tactical Palette */
+            --bg-dark: #000205; 
+            --panel-bg: #090e17;
+            --primary: #f43f5e; --primary-glow: #e11d48;
+            --secondary: #0ea5e9; --secondary-glow: #0284c7;
+            --accent: #f59e0b; 
+            --text-main: #f8fafc; --text-muted: #64748b;
+            --health: #10b981;
+            --p-color: #0ea5e9; --e-color: #f43f5e;
+            
+            --sharp-edge: 0px; /* SHARP UI NO SOFT RADIUS */
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Rajdhani', sans-serif; user-select: none; }
+
+        body {
+            background-color: var(--bg-dark); color: var(--text-main);
+            width: 100vw; height: 100vh; overflow: hidden; display: flex; flex-direction: column;
+            margin: 0;
+        }
+
+        /* Scanline Overlay (Optimized) */
+        body::after {
+            content: " "; display: block; position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.05), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.05));
+            z-index: 999; background-size: 100% 2px, 3px 100%; pointer-events: none; opacity: 0.5;
+        }
+
+        #game-engine {
+            flex: 1; width: 100vw; height: 100vh; display: flex; flex-direction: column; position: relative;
+            background: var(--bg-dark); overflow: hidden;
+        }
+
+        /* --- SELECTION SCREEN --- */
+        #selection-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(2, 4, 10, 0.98); z-index: 1000; display: flex; flex-direction: column; 
+            align-items: center; padding: 3vh 2vw; transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.2, 1, 0.3, 1);
+            overflow-y: auto; border: 4px solid var(--secondary);
+        }
+
+        .screen-header {
+            text-align: center; font-size: clamp(2rem, 4vw, 3.5rem); font-weight: 900; color: var(--text-main);
+            margin-bottom: 2vh; letter-spacing: 5px; flex-shrink: 0; 
+            border-bottom: 2px solid var(--secondary); padding-bottom: 10px; text-transform: uppercase;
+        }
+
+        .roster-container { display: flex; justify-content: center; align-items: stretch; width: 100%; max-width: 1400px; gap: 2vw; flex: 1; min-height: 0; }
+
+        .roster-side {
+            flex: 1; background: #070c14; border: 1px solid #1e293b; border-top: 4px solid var(--secondary);
+            padding: 2vh 1.5vw; display: flex; flex-direction: column; position: relative;
+            clip-path: polygon(0 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%);
+        }
+        .roster-side:nth-child(3) { border-top-color: var(--primary); }
+
+        .roster-title { text-align: center; font-weight: 900; font-size: clamp(1rem, 2vw, 1.5rem); margin-bottom: 2vh; color: var(--text-main); letter-spacing: 3px; flex-shrink: 0; text-transform: uppercase;}
+
+        .char-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; overflow-y: auto; padding-right: 10px; align-content: flex-start; flex: 1; }
+        .char-grid::-webkit-scrollbar { width: 4px; } .char-grid::-webkit-scrollbar-thumb { background: var(--secondary); }
+
+        .char-card {
+            background: #090e17; border: 1px solid #1e293b; padding: 10px; text-align: center; cursor: pointer; 
+            transition: all 0.2s; position: relative; display: flex; flex-direction: column; align-items: center;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+        }
+        .char-card:hover { border-color: var(--text-muted); background: #111a2a; }
+        .char-card.selected-p { border-color: var(--secondary); background: rgba(14, 165, 233, 0.1); box-shadow: inset 0 0 20px rgba(14, 165, 233, 0.5); }
+        .char-card.selected-e { border-color: var(--primary); background: rgba(244, 63, 94, 0.1); box-shadow: inset 0 0 20px rgba(244, 63, 94, 0.5); }
+
+        .mini-avatar-p, .mini-avatar-e { width: 50px; height: 50px; position: relative; margin-bottom: 8px; display: flex; justify-content: center; align-items: center; }
+        .mini-avatar-p { background: #05080f; border: 2px solid var(--color); clip-path: polygon(20% 0%, 80% 0%, 100% 30%, 50% 100%, 0% 30%); }
+        .mini-avatar-e { background: #05080f; border: 2px solid var(--color); clip-path: polygon(10% 0%, 90% 0%, 100% 40%, 80% 100%, 20% 100%, 0 40%); }
+        
+        .char-card .char-name { font-size: clamp(0.85rem, 1vw, 1.1rem); font-weight: 900; margin-bottom: 2px; text-transform: uppercase; }
+        .char-card .char-role { font-size: 0.75rem; color: var(--accent); font-weight: 700; text-transform: uppercase; background: #000; padding: 2px 6px; border: 1px solid #333; }
+
+        .vs-badge { align-self: center; font-size: clamp(3rem, 5vw, 5rem); font-weight: 900; color: transparent; -webkit-text-stroke: 2px #fff; font-style: italic; flex-shrink: 0; }
+
+        #btn-start-fight {
+            margin-top: 3vh; padding: 2vh 4vw; font-size: clamp(1.2rem, 2vw, 1.8rem); background: var(--primary);
+            color: white; border: none; font-weight: 900; letter-spacing: 5px; cursor: pointer; flex-shrink: 0;
+            transition: 0.2s; clip-path: polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px);
+        }
+        #btn-start-fight:hover:not(:disabled) { background: #fff; color: var(--primary); }
+        #btn-start-fight:disabled { background: #1e293b; color: #475569; cursor: not-allowed; clip-path: none; }
+
+        /* --- END/FAIL SCREEN --- */
+        #end-screen {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.95); z-index: 9999; display: none; flex-direction: column; 
+            justify-content: center; align-items: center; text-align: center; padding: 20px;
+        }
+        #end-title { font-size: 5rem; font-weight: 900; text-transform: uppercase; letter-spacing: 10px; margin-bottom: 20px; }
+        #end-msg { font-size: 1.5rem; color: var(--text-muted); max-width: 600px; line-height: 1.5; margin-bottom: 40px; }
+        #btn-reboot {
+            padding: 15px 40px; font-size: 1.5rem; font-weight: 900; background: transparent; color: #fff;
+            border: 2px solid #fff; cursor: pointer; text-transform: uppercase; letter-spacing: 3px; transition: 0.2s;
+        }
+        #btn-reboot:hover { background: #fff; color: #000; }
+
+
+        /* --- MAIN ARENA (RUANG JAKSA BG) --- */
+        .arena {
+            flex: 1; position: relative; display: flex; justify-content: space-around; 
+            align-items: flex-end; padding: 2vh 5vw 4vh; perspective: 1200px;
+            background: #020408; z-index: 10; min-height: 0;
+        }
+
+        /* Ruang Jaksa Elements (CSS) */
+        .court-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -2; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; overflow: hidden; }
+        .court-wall { position: absolute; top: 0; width: 100%; height: 60%; background: linear-gradient(to bottom, #050a14, #0a1120); border-bottom: 2px solid #1e293b; }
+        .court-pillar { position: absolute; top: -10%; width: 8vw; height: 75%; background: linear-gradient(to right, #0a1120, #1e293b, #0a1120); border-left: 1px solid #333; border-right: 1px solid #333; }
+        .court-pillar.left { left: 15%; } .court-pillar.right { right: 15%; }
+        .judge-desk {
+            position: absolute; bottom: 35%; width: 50vw; height: 25vh; background: #0a1120;
+            border-top: 4px solid #334155; border-left: 2px solid #1e293b; border-right: 2px solid #1e293b;
+            clip-path: polygon(5% 0, 95% 0, 100% 100%, 0 100%); box-shadow: 0 20px 50px rgba(0,0,0,0.9);
+        }
+        .court-floor {
+            position: absolute; bottom: 0; width: 200%; height: 50%;
+            background: linear-gradient(#050a14 1px, transparent 1px), linear-gradient(90deg, #050a14 1px, transparent 1px);
+            background-size: 80px 80px; transform: rotateX(75deg); transform-origin: top; background-color: #0a1120;
+        }
+
+        .entity { display: flex; flex-direction: column; align-items: center; width: 30%; max-width: 320px; z-index: 10; position: relative; }
+
+        /* Sharp HUD */
+        .hud {
+            width: 100%; background: #05080f; padding: 1.5vh 1.5vw; 
+            border: 2px solid #1e293b; border-top: 4px solid; margin-bottom: 2vh; 
+            position: relative; overflow: hidden; border-radius: var(--sharp-edge);
+        }
+        #player .hud { border-top-color: var(--secondary); box-shadow: 0 10px 20px rgba(0,0,0,0.8); }
+        #enemy .hud { border-top-color: var(--primary); box-shadow: 0 10px 20px rgba(0,0,0,0.8); }
+
+        .hud h3 { font-size: clamp(1.2rem, 2vw, 1.5rem); margin-bottom: 1vh; text-transform: uppercase; letter-spacing: 2px; font-weight: 900; }
+        #player .hud h3 { color: var(--secondary); } #enemy .hud h3 { color: var(--primary); }
+
+        .status-indicators { display: flex; gap: 5px; justify-content: flex-start; margin-bottom: 1vh; height: 18px; }
+        .status-icon { font-size: 0.75rem; padding: 2px 6px; font-weight: 900; text-transform: uppercase; border: 1px solid; }
+        .st-stun { background: transparent; color: var(--accent); border-color: var(--accent); } 
+        .st-dot { background: transparent; color: var(--primary); border-color: var(--primary); } 
+        .st-def { background: transparent; color: var(--secondary); border-color: var(--secondary); }
+
+        .bar-container { width: 100%; height: 12px; background: #000; margin-bottom: 0.8vh; border: 1px solid #1e293b; }
+        .bar { height: 100%; transition: width 0.3s cubic-bezier(0.2, 1, 0.3, 1); }
+        .hp-bar { background: var(--health); } .ap-bar { background: var(--secondary); } .enemy-hp { background: var(--primary); }
+        .stats-text { display: flex; justify-content: space-between; font-size: clamp(0.9rem, 1.5vw, 1rem); color: #e2e8f0; font-weight: 900; }
+
+        /* --- COMPLEX CSS SPRITES (NON-BOXY) --- */
+        .sprite { position: relative; transition: transform 0.2s; filter: drop-shadow(0 20px 20px rgba(0,0,0,0.9)); animation: idleBreath 3s ease-in-out infinite alternate; }
+        
+        /* Agent Taktis (Humanoid V-Shape) */
+        .agent-body {
+            width: clamp(70px, 9vw, 100px); height: clamp(110px, 16vh, 150px); 
+            background: linear-gradient(135deg, #1e293b, #05080f);
+            border: 2px solid var(--secondary); 
+            clip-path: polygon(20% 0%, 80% 0%, 100% 30%, 60% 100%, 40% 100%, 0% 30%); /* Torso V-Shape */
+            position: relative; display: flex; justify-content: center;
+        }
+        .agent-arm-l, .agent-arm-r {
+            position: absolute; top: 30%; width: 20%; height: 60%; background: #0f172a; border: 1px solid var(--secondary);
+        }
+        .agent-arm-l { left: -25%; transform: rotate(15deg); } .agent-arm-r { right: -25%; transform: rotate(-15deg); }
+        .agent-head {
+            width: clamp(40px, 5vw, 55px); height: clamp(40px, 5vw, 55px); background: #05080f; 
+            border: 2px solid var(--secondary); position: absolute; top: -35%; left: 50%; transform: translateX(-50%);
+            clip-path: polygon(30% 0%, 70% 0%, 100% 40%, 80% 100%, 20% 100%, 0% 40%); /* Helmet shape */
+            display: flex; justify-content: center; align-items: center;
+        }
+        .agent-head::after { content: ''; width: 60%; height: 15%; background: #fff; box-shadow: 0 0 10px var(--secondary); }
+
+        /* Corruptor Juggernaut */
+        .corruptor-body {
+            width: clamp(100px, 13vw, 150px); height: clamp(130px, 19vh, 180px); 
+            background: linear-gradient(135deg, #334155, #05080f); border: 2px solid var(--primary); 
+            clip-path: polygon(10% 0%, 90% 0%, 100% 40%, 80% 100%, 20% 100%, 0 40%); /* Bulky Torso */
+            position: relative; display: flex; justify-content: center;
+        }
+        .corruptor-pads {
+            position: absolute; top: -10%; width: 130%; height: 30%; background: #0f172a; border-bottom: 2px solid var(--primary);
+            clip-path: polygon(0 0, 100% 0, 80% 100%, 20% 100%);
+        }
+        .corruptor-head {
+            width: clamp(55px, 7vw, 75px); height: clamp(55px, 7vw, 75px); background: #05080f; 
+            border: 2px solid var(--primary); position: absolute; top: -45%; left: 50%; transform: translateX(-50%);
+            clip-path: polygon(0 0, 100% 0, 80% 100%, 20% 100%); /* Crown shape */
+            display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px;
+        }
+        .corruptor-head::before { content: ''; width: 80%; height: 8%; background: var(--primary); }
+        .corruptor-head::after { content: ''; width: 40%; height: 8%; background: var(--primary); }
+
+        /* --- FLUID DASHBOARD (SHARP UI) --- */
+        .dashboard {
+            height: 35vh; background: #05080f; border-top: 2px solid #1e293b;
+            display: flex; justify-content: center; z-index: 20; position: relative; flex-shrink: 0;
+        }
+
+        .menu-nav {
+            width: 20%; min-width: 160px; background: #020408; padding: 2vh 1vw; 
+            display: flex; flex-direction: column; gap: 1vh; border-right: 1px solid #1e293b; overflow-y: auto;
+        }
+
+        .menu-btn {
+            background: transparent; color: #fff; border: 1px solid transparent; border-left: 4px solid var(--secondary);
+            padding: 1.5vh 1vw; font-size: clamp(1rem, 1.5vw, 1.2rem); font-weight: 900; letter-spacing: 2px; cursor: pointer; text-align: left;
+            transition: 0.2s; position: relative; text-transform: uppercase;
+        }
+        .menu-btn:hover:not(:disabled) { padding-left: 1.5vw; background: rgba(14, 165, 233, 0.1); border-color: var(--secondary); }
+        .menu-btn.active { background: var(--secondary); color: #000; border-color: #fff; }
+        .menu-btn:disabled { opacity: 0.2; cursor: not-allowed; }
+
+        .action-panel {
+            flex: 1; max-width: 1000px; padding: 2vh 2vw; display: grid; grid-template-columns: 1fr 1fr; gap: 1.5vh 1.5vw;
+            background: transparent; align-content: flex-start; overflow-y: auto;
+        }
+        .action-panel::-webkit-scrollbar { width: 5px; } .action-panel::-webkit-scrollbar-thumb { background: #334155; }
+
+        .dyn-btn {
+            background: #090e17; color: var(--text-main); border: 1px solid #1e293b; border-radius: var(--sharp-edge); 
+            padding: 2vh 1.5vw; cursor: pointer; transition: 0.1s; display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+            position: relative; overflow: hidden; min-height: 80px;
+        }
+        .dyn-btn::before { content: ''; position: absolute; left: 0; bottom: 0; width: 0%; height: 2px; background: #fff; transition: 0.3s; }
+        .dyn-btn:hover:not(:disabled) { border-color: var(--text-muted); background: #0f172a; transform: scale(1.01); }
+        .dyn-btn:hover:not(:disabled)::before { width: 100%; }
+        .dyn-btn:active:not(:disabled) { transform: scale(0.99); }
+        .dyn-btn:disabled { opacity: 0.3; filter: grayscale(1); cursor: not-allowed; }
+
+        .btn-title { font-size: clamp(1rem, 1.5vw, 1.2rem); font-weight: 900; margin-bottom: 4px; letter-spacing: 1px; color: #fff; text-transform: uppercase;}
+        .btn-desc { font-size: clamp(0.7rem, 1vw, 0.9rem); color: var(--text-muted); line-height: 1.3; font-weight: 600; }
+        .btn-cost { position: absolute; top: 10px; right: 10px; font-size: clamp(0.9rem, 1.2vw, 1rem); font-weight: 900; padding: 2px 6px; border: 1px solid; }
+
+        .type-atk { border-left: 4px solid var(--primary); } .type-atk .btn-cost { color: var(--primary); border-color: var(--primary); }
+        .type-heavy { border-left: 4px solid var(--accent); } .type-heavy .btn-cost { color: var(--accent); border-color: var(--accent); }
+        .type-def { border-left: 4px solid var(--secondary); } .type-def .btn-cost { color: var(--secondary); border-color: var(--secondary); }
+        .type-tech { border-left: 4px solid #a855f7; } .type-tech .btn-cost { color: #a855f7; border-color: #a855f7; }
+        .type-item { border-left: 4px solid var(--health); } .type-item .btn-cost { color: var(--health); border-color: var(--health); }
+
+        .logger {
+            width: 25%; min-width: 200px; background: #020408; border-left: 1px solid #1e293b; padding: 2vh 1vw;
+            font-family: 'Consolas', monospace; font-size: clamp(0.75rem, 1vw, 0.9rem); overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+        }
+        .logger::-webkit-scrollbar { width: 4px; } .logger::-webkit-scrollbar-thumb { background: #334155; }
+
+        .log-item { padding: 8px 10px; background: #090e17; border-left: 2px solid #334155; animation: slideIn 0.2s ease-out; line-height: 1.3; color: #e2e8f0; font-weight: 600; }
+        .log-player { border-left-color: var(--secondary); color: #bae6fd; }
+        .log-enemy { border-left-color: var(--primary); color: #fecdd3; }
+        .log-critical { border-left-color: var(--accent); font-weight: 900; color: #000; background: var(--accent); }
+        .log-status { border-left-color: #a855f7; font-style: italic; color: #e9d5ff; }
+
+        /* --- OPTIMIZED VFX & ANIMATIONS --- */
+        .floater { position: absolute; font-size: clamp(2rem, 4vw, 3.5rem); font-weight: 900; pointer-events: none; animation: floatUp 0.8s ease-out forwards; text-shadow: 2px 2px 0 #000, -2px -2px 0 #000; z-index: 100; }
+        
+        .impact-slash { position: absolute; width: 300px; height: 8px; background: #fff; box-shadow: 0 0 10px #fff, 0 0 20px var(--primary); transform: rotate(45deg) scaleX(0); opacity: 1; z-index: 100; animation: slashAnim 0.3s cubic-bezier(0.1, 0.9, 0.2, 1) forwards; pointer-events: none; }
+        .impact-burst { position: absolute; width: 100px; height: 100px; background: radial-gradient(circle, #fff 0%, var(--secondary) 50%, transparent 100%); opacity: 1; z-index: 100; animation: burstAnim 0.4s ease-out forwards; pointer-events: none; border-radius: 50%; }
+
+        @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(0.5); } 20% { transform: translateY(-30px) scale(1.2); } 100% { opacity: 0; transform: translateY(-80px) scale(1); } }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes slashAnim { 0% { transform: rotate(45deg) scaleX(0); opacity: 1; } 50% { transform: rotate(45deg) scaleX(1.5); opacity: 1; } 100% { transform: rotate(45deg) scaleX(2); opacity: 0; } }
+        @keyframes burstAnim { 0% { transform: scale(0); opacity: 1; } 100% { transform: scale(3); opacity: 0; } }
+        @keyframes idleBreath { 0% { transform: translateY(0px); } 100% { transform: translateY(6px); } }
+        
+        @keyframes atk-dash { 0% { transform: translateX(0); } 40% { transform: translateX(10vw); filter: brightness(1.5); } 100% { transform: translateX(0); } }
+        @keyframes atk-dash-enemy { 0% { transform: translateX(0); } 40% { transform: translateX(-10vw); filter: brightness(1.5); } 100% { transform: translateX(0); } }
+        @keyframes hit-shake { 0%, 100% { transform: translate(0, 0); filter: brightness(1); } 25% { transform: translate(-10px, 5px); filter: brightness(2); } 50% { transform: translate(10px, -5px); } 75% { transform: translate(-5px, 5px); } }
+        @keyframes block-shake { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-5px); filter: brightness(1.5); } }
+        @keyframes screen-shake { 0%, 100% { transform: translate(0,0); } 25% { transform: translate(-8px, 8px); } 50% { transform: translate(8px, -8px); } 75% { transform: translate(-8px, -8px); } }
+
+        .anim-atk { animation: atk-dash 0.25s cubic-bezier(0.2, 1, 0.3, 1); }
+        .anim-atk-enemy { animation: atk-dash-enemy 0.25s cubic-bezier(0.2, 1, 0.3, 1); }
+        .anim-hit { animation: hit-shake 0.3s cubic-bezier(0.2, 1, 0.3, 1); }
+        .anim-block { animation: block-shake 0.25s ease; }
+        .screen-shake { animation: screen-shake 0.3s cubic-bezier(0.2, 1, 0.3, 1); }
+    </style>
+</head>
+<body>
+
+    <div id="game-engine">
+        
+        <div id="end-screen">
+            <div id="end-title">MISI GAGAL</div>
+            <div id="end-msg">Sistem telah dikuasai. Korupsi merajalela.</div>
+            <button id="btn-reboot" onclick="location.reload()">REBOOT SYSTEM</button>
+        </div>
+
+        <div id="selection-screen">
+            <div class="screen-header">PROTOKOL SELEKSI</div>
+            
+            <div class="roster-container">
+                <div class="roster-side">
+                    <div class="roster-title">DIVISI PENINDAKAN</div>
+                    <div class="char-grid" id="grid-player"></div>
+                </div>
+                <div class="vs-badge">VS</div>
+                <div class="roster-side">
+                    <div class="roster-title">TARGET OPERASI</div>
+                    <div class="char-grid" id="grid-enemy"></div>
+                </div>
+            </div>
+
+            <button id="btn-start-fight" disabled>INISIASI PENYERGAPAN</button>
+        </div>
+
+        <div class="arena" id="arena">
+            <div class="court-bg">
+                <div class="court-wall"></div>
+                <div class="court-pillar left"></div>
+                <div class="court-pillar right"></div>
+                <div class="judge-desk"></div>
+                <div class="court-floor"></div>
+            </div>
+
+            <div class="entity" id="player">
+                <div class="hud">
+                    <h3 id="p-name-hud">AGEN</h3>
+                    <div class="status-indicators" id="p-status"></div>
+                    <div class="bar-container"><div class="bar hp-bar" id="p-hp-bar"></div></div>
+                    <div class="stats-text"><span id="p-hp-text">0/0 HP</span></div>
+                    <div class="bar-container"><div class="bar ap-bar" id="p-ap-bar"></div></div>
+                    <div class="stats-text"><span id="p-ap-text">0/0 AP</span></div>
+                </div>
+                <div class="sprite" id="p-sprite">
+                    <div class="agent-body"><div class="agent-head"></div><div class="agent-arm-l"></div><div class="agent-arm-r"></div></div>
+                </div>
+            </div>
+
+            <div class="entity" id="enemy">
+                <div class="hud">
+                    <h3 id="e-name-hud">TARGET</h3>
+                    <div class="status-indicators" id="e-status"></div>
+                    <div class="bar-container"><div class="bar enemy-hp" id="e-hp-bar"></div></div>
+                    <div class="stats-text"><span id="e-hp-text">0/0 HP</span></div>
+                    <div class="bar-container"><div class="bar ap-bar" id="e-ap-bar"></div></div>
+                    <div class="stats-text"><span id="e-ap-text">0/0 AP</span></div>
+                </div>
+                <div class="sprite" id="e-sprite">
+                    <div class="corruptor-body"><div class="corruptor-pads"></div><div class="corruptor-head"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard">
+            <div class="menu-nav">
+                <button class="menu-btn" id="nav-fight" onclick="switchTab('fight')">SKILLS</button>
+                <button class="menu-btn" id="nav-item" onclick="switchTab('item')">INVENTORY</button>
+                <button class="menu-btn" id="nav-defend" onclick="executeDefend()">DEFEND</button>
+            </div>
+            <div class="action-panel" id="action-panel"></div>
+            <div class="logger" id="log-container">
+                <div class="log-item">SYSTEM: Menunggu otorisasi...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- BALANCED HARD DATABASE ---
+        const rosters = {
+            player: [
+                { id: 'p1', name: "Agen Spesialis", role: "Balanced", color: "#0ea5e9", hp: 240, maxHp: 240, ap: 60, maxAp: 100, apRegen: 25,
+                  skills: [ { name: "Tembakan Presisi", type: "atk", cost: -15, dmg: 30, eff: null, desc: "Damage stabil. Akurasi 100%." },
+                            { name: "Operasi OTT", type: "heavy", cost: -50, dmg: 75, eff: null, desc: "Damage besar, peluang meleset." },
+                            { name: "Interogasi", type: "tech", cost: -30, dmg: 10, eff: "drain", desc: "Curi 25 AP target." },
+                            { name: "Gas Air Mata", type: "tech", cost: -40, dmg: 5, eff: "stun", desc: "Lumpuhkan 1 giliran." } ] },
+                { id: 'p2', name: "Brimob Taktis", role: "Tank / Brute", color: "#f43f5e", hp: 340, maxHp: 340, ap: 40, maxAp: 80, apRegen: 15,
+                  skills: [ { name: "Battering Ram", type: "heavy", cost: -25, dmg: 45, eff: null, desc: "Damage fisik tinggi konstan." },
+                            { name: "Shield Bash", type: "def", cost: -20, dmg: 15, eff: "defend_heavy", desc: "Tahan 90% DMG turn ini." },
+                            { name: "Suppressive Fire", type: "atk", cost: -35, dmg: 30, eff: "dot", desc: "Tembakan beruntun + DoT." },
+                            { name: "Adrenaline Rush", type: "tech", cost: +40, dmg: -20, eff: null, desc: "Korbankan 20 HP, dapat 40 AP." } ] },
+                { id: 'p3', name: "Auditor Cyber", role: "Control / Heal", color: "#3b82f6", hp: 180, maxHp: 180, ap: 80, maxAp: 150, apRegen: 35,
+                  skills: [ { name: "DDOS Attack", type: "atk", cost: -20, dmg: 20, eff: "dot", desc: "Infeksi sistem. DoT 3 Turn." },
+                            { name: "Freeze Asset", type: "tech", cost: -60, dmg: 0, eff: "stun", desc: "Bekukan aset musuh (Stun)." },
+                            { name: "Data Siphon", type: "tech", cost: -10, dmg: 15, eff: "drain_heavy", desc: "Curi 40 AP Musuh." },
+                            { name: "System Restore", type: "tech", cost: -70, dmg: -80, eff: "heal", desc: "Pulihkan 80 HP." } ] },
+                { id: 'p4', name: "Intelijen Gelap", role: "Assassin", color: "#a855f7", hp: 190, maxHp: 190, ap: 50, maxAp: 100, apRegen: 30,
+                  skills: [ { name: "Sniper Shot", type: "heavy", cost: -60, dmg: 110, eff: null, desc: "Akurasi 60%, Sangat Mematikan." },
+                            { name: "Poison Dart", type: "tech", cost: -25, dmg: 10, eff: "dot_heavy", desc: "DoT Sangat Kuat." },
+                            { name: "Shadow Strike", type: "atk", cost: -15, dmg: 30, eff: null, desc: "Serangan senyap cepat." },
+                            { name: "Vanish", type: "def", cost: -40, dmg: 0, eff: "evade", desc: "Hindari serangan 100%." } ] },
+                { id: 'p5', name: "Jaksa Eksekutor", role: "Nuker", color: "#fbbf24", hp: 230, maxHp: 230, ap: 40, maxAp: 100, apRegen: 20,
+                  skills: [ { name: "Surat Dakwaan", type: "atk", cost: -20, dmg: 30, eff: null, desc: "Damage konstan di meja hijau." },
+                            { name: "Penyitaan", type: "tech", cost: -35, dmg: 20, eff: "drain", desc: "Sita 20 AP." },
+                            { name: "Hukum Mati", type: "heavy", cost: -90, dmg: 140, eff: null, desc: "Eksekusi fatal. Butuh 90 AP." },
+                            { name: "Banding Ulang", type: "def", cost: +50, dmg: 0, eff: "defend", desc: "Pulih AP masif, tahan DMG." } ] }
+            ],
+            enemy: [
+                { id: 'e1', name: "Koruptor Kakap", role: "Tank / Healer", color: "#fbbf24", hp: 350, maxHp: 350, ap: 50, maxAp: 100, apRegen: 20, ai: 'survival' },
+                { id: 'e2', name: "Mafia Hukum", role: "Control / Drain", color: "#a855f7", hp: 260, maxHp: 260, ap: 80, maxAp: 150, apRegen: 35, ai: 'drainer' },
+                { id: 'e3', name: "Oligarki Tambang", role: "Brute", color: "#10b981", hp: 450, maxHp: 450, ap: 20, maxAp: 80, apRegen: 15, ai: 'berserk' },
+                { id: 'e4', name: "Hacker Sindikat", role: "Evasion / DoT", color: "#06b6d4", hp: 220, maxHp: 220, ap: 70, maxAp: 120, apRegen: 30, ai: 'technical' },
+                { id: 'e5', name: "Jenderal Beking", role: "Heavy Damage", color: "#ef4444", hp: 320, maxHp: 320, ap: 40, maxAp: 100, apRegen: 25, ai: 'tactical' }
+            ],
+            items: [
+                { id: 'medkit', name: "First Aid Kit", type: "item", heal: 100, ap: 0, desc: "Pulihkan 100 HP.", count: 2 },
+                { id: 'kopi', name: "Kopi Hitam", type: "item", heal: 0, ap: 50, desc: "Pulihkan 50 AP.", count: 2 },
+                { id: 'bukti', name: "Hard Drive Bukti", type: "item", heal: 80, ap: 80, desc: "Pulihkan 80 HP & 80 AP.", count: 1 }
+            ]
+        };
+
+        let state = { turn: 'player', player: null, enemy: null, inventory: [], pStatus: { def: 0, stun: 0, dot: 0, dotDmg: 0 }, eStatus: { def: 0, stun: 0, dot: 0, dotDmg: 0 } };
+        let selP = null, selE = null;
+
+        const DOM = {
+            phpT: document.getElementById('p-hp-text'), phpB: document.getElementById('p-hp-bar'), papT: document.getElementById('p-ap-text'), papB: document.getElementById('p-ap-bar'),
+            ehpT: document.getElementById('e-hp-text'), ehpB: document.getElementById('e-hp-bar'), eapT: document.getElementById('e-ap-text'), eapB: document.getElementById('e-ap-bar'),
+            pSpr: document.getElementById('p-sprite'), eSpr: document.getElementById('e-sprite'), log: document.getElementById('log-container'), panel: document.getElementById('action-panel')
+        };
+
+        function initSelection() {
+            const gP = document.getElementById('grid-player'); const gE = document.getElementById('grid-enemy'); const btn = document.getElementById('btn-start-fight');
+            rosters.player.forEach((c, i) => {
+                let d = document.createElement('div'); d.className = 'char-card'; 
+                d.innerHTML = `<div class="mini-avatar-p" style="--color:${c.color}"></div><div class="char-name">${c.name}</div><div class="char-role">${c.role}</div>`;
+                d.onclick = () => { document.querySelectorAll('#grid-player .char-card').forEach(e => e.classList.remove('selected-p')); d.classList.add('selected-p'); selP = i; btn.disabled = (selP===null || selE===null); }; gP.appendChild(d);
+            });
+            rosters.enemy.forEach((c, i) => {
+                let d = document.createElement('div'); d.className = 'char-card'; 
+                d.innerHTML = `<div class="mini-avatar-e" style="--color:${c.color}"></div><div class="char-name">${c.name}</div><div class="char-role">${c.role}</div>`;
+                d.onclick = () => { document.querySelectorAll('#grid-enemy .char-card').forEach(e => e.classList.remove('selected-e')); d.classList.add('selected-e'); selE = i; btn.disabled = (selP===null || selE===null); }; gE.appendChild(d);
+            });
+            btn.onclick = () => {
+                document.getElementById('selection-screen').style.transform = 'translateY(-100vh)'; document.getElementById('selection-screen').style.opacity = '0';
+                setTimeout(() => document.getElementById('selection-screen').style.display = 'none', 600);
+                state.player = JSON.parse(JSON.stringify(rosters.player[selP])); state.enemy = JSON.parse(JSON.stringify(rosters.enemy[selE])); state.inventory = JSON.parse(JSON.stringify(rosters.items));
+                document.documentElement.style.setProperty('--p-color', state.player.color); document.documentElement.style.setProperty('--e-color', state.enemy.color);
+                document.getElementById('p-name-hud').innerText = state.player.name; document.getElementById('e-name-hud').innerText = state.enemy.name;
+                updateHUD(); switchTab('main'); logEvent(`[LINK SECURED] Target: ${state.enemy.name}. Prepare for combat.`, 'system');
+            };
+        }
+
+        function switchTab(tab) {
+            if(state.turn !== 'player') return;
+            DOM.panel.innerHTML = '';
+            document.querySelectorAll('.menu-btn').forEach(b => { b.disabled = false; b.classList.remove('active'); });
+
+            if(tab === 'main') {
+                DOM.panel.innerHTML = `<div style="grid-column: span 2; display:flex; align-items:center; justify-content:center; color: var(--text-muted); font-size: 1.5rem; letter-spacing: 2px;">MENUNGGU INPUT...</div>`;
+            } 
+            else if(tab === 'fight') {
+                document.getElementById('nav-fight').classList.add('active');
+                state.player.skills.forEach((sk, i) => {
+                    let b = document.createElement('button'); b.className = `dyn-btn type-${sk.type}`;
+                    let disabled = (sk.cost < 0 && state.player.ap < Math.abs(sk.cost)) ? 'disabled' : '';
+                    b.innerHTML = `<div class="btn-title">${sk.name}</div><div class="btn-desc">${sk.desc}</div><div class="btn-cost">${sk.cost>0?'+'+sk.cost:sk.cost} AP</div>`;
+                    if(!disabled) b.onclick = () => execSkill(i); else b.disabled = true;
+                    DOM.panel.appendChild(b);
+                });
+            }
+            else if(tab === 'item') {
+                document.getElementById('nav-item').classList.add('active');
+                state.inventory.forEach((it, i) => {
+                    let b = document.createElement('button'); b.className = `dyn-btn type-item`;
+                    if(it.count <= 0) b.disabled = true;
+                    b.innerHTML = `<div class="btn-title">${it.name} <span style="color:var(--health)">(x${it.count})</span></div><div class="btn-desc">${it.desc}</div>`;
+                    if(it.count > 0) b.onclick = () => execItem(i);
+                    DOM.panel.appendChild(b);
+                });
+            }
+        }
+
+        function updateHUD() {
+            DOM.phpT.innerText = `${Math.floor(state.player.hp)}/${state.player.maxHp}`; DOM.phpB.style.width = `${(state.player.hp/state.player.maxHp)*100}%`;
+            DOM.papT.innerText = `${Math.floor(state.player.ap)}/${state.player.maxAp}`; DOM.papB.style.width = `${(state.player.ap/state.player.maxAp)*100}%`;
+            DOM.ehpT.innerText = `${Math.floor(state.enemy.hp)}/${state.enemy.maxHp}`; DOM.ehpB.style.width = `${(state.enemy.hp/state.enemy.maxHp)*100}%`;
+            DOM.eapT.innerText = `${Math.floor(state.enemy.ap)}/${state.enemy.maxAp}`; DOM.eapB.style.width = `${(state.enemy.ap/state.enemy.maxAp)*100}%`;
+
+            let ps = '', es = '';
+            if(state.pStatus.def > 0) ps += `<span class="status-icon st-def">BLOCK</span>`;
+            if(state.pStatus.stun > 0) ps += `<span class="status-icon st-stun">STUNNED</span>`;
+            if(state.pStatus.dot > 0) ps += `<span class="status-icon st-dot">BLEED</span>`;
+            if(state.eStatus.def > 0) es += `<span class="status-icon st-def">BLOCK</span>`;
+            if(state.eStatus.stun > 0) es += `<span class="status-icon st-stun">STUNNED</span>`;
+            if(state.eStatus.dot > 0) es += `<span class="status-icon st-dot">BLEED</span>`;
+            document.getElementById('p-status').innerHTML = ps; document.getElementById('e-status').innerHTML = es;
+        }
+
+        function logEvent(msg, type='system') {
+            let el = document.createElement('div'); el.className = `log-item log-${type}`; el.innerHTML = msg;
+            DOM.log.appendChild(el); DOM.log.scrollTop = DOM.log.scrollHeight;
+        }
+
+        function floatTxt(tType, val, color) {
+            let tg = tType==='enemy'?DOM.eSpr:DOM.pSpr; let rect = tg.getBoundingClientRect(); let ar = document.getElementById('arena').getBoundingClientRect();
+            let randX = (Math.random() - 0.5) * 60; 
+            let fl = document.createElement('div'); fl.className = 'floater'; fl.style.color = color; fl.innerText = val;
+            fl.style.left = `${rect.left - ar.left + (rect.width/2) - 20 + randX}px`; fl.style.top = `${rect.top - ar.top + 20}px`;
+            document.getElementById('arena').appendChild(fl); setTimeout(() => fl.remove(), 800);
+        }
+
+        function anim(id, c) { let e = document.getElementById(id); e.classList.remove(c); void e.offsetWidth; e.classList.add(c); setTimeout(()=>e.classList.remove(c), 300); }
+        function shakeScreen() { anim('game-engine', 'screen-shake'); }
+        
+        function spawnImpact(tStr, type) {
+            let tg = tStr==='enemy'?DOM.eSpr:DOM.pSpr; let rect = tg.getBoundingClientRect(); let ar = document.getElementById('arena').getBoundingClientRect();
+            let fx = document.createElement('div'); fx.className = type === 'slash' ? 'impact-slash' : 'impact-burst';
+            fx.style.left = `${rect.left - ar.left + (rect.width/2) - (type==='slash'?150:50)}px`; 
+            fx.style.top = `${rect.top - ar.top + (rect.height/2) - 10}px`;
+            document.getElementById('arena').appendChild(fx); setTimeout(() => fx.remove(), 400);
+        }
+
+        // --- END SCREEN (REPLACES ALERT) ---
+        function triggerEndScreen(win) {
+            const screen = document.getElementById('end-screen');
+            const title = document.getElementById('end-title');
+            const msg = document.getElementById('end-msg');
+            
+            screen.style.display = 'flex';
+            if(win) {
+                title.innerText = "MISI BERHASIL"; title.style.color = "var(--health)";
+                msg.innerText = "Target berhasil ditumbangkan. Integritas sistem pulih untuk sementara waktu.";
+            } else {
+                title.innerText = "SISTEM GAGAL"; title.style.color = "var(--primary)";
+                msg.innerText = "Operasi gagal. Target telah mengambil alih seluruh struktur kekuasaan.";
+            }
+        }
+
+        function checkWin() {
+            if(state.enemy.hp <= 0) { setTimeout(()=> triggerEndScreen(true), 1500); return true; }
+            if(state.player.hp <= 0) { setTimeout(()=> triggerEndScreen(false), 1500); return true; }
+            return false;
+        }
+
+        function resolvePreTurn(str) {
+            let st = str==='player' ? state.pStatus : state.eStatus; let data = str==='player' ? state.player : state.enemy;
+            if(st.dot > 0) {
+                data.hp -= st.dotDmg; st.dot--; logEvent(`[ATTRITION] ${data.name} kena ${st.dotDmg} DMG.`, 'status');
+                floatTxt(str, `-${st.dotDmg}`, '#e11d48'); anim(str==='player'?'p-sprite':'e-sprite', 'anim-hit');
+            }
+            st.def = 0; 
+        }
+
+        function executeDefend() {
+            if(state.turn !== 'player') return;
+            state.turn = 'processing'; document.getElementById('nav-defend').classList.add('active'); lockUI(); resolvePreTurn('player');
+            if(checkWin()) return; if(checkStun('player')) return endTurn('enemy');
+
+            state.player.ap = Math.min(state.player.maxAp, state.player.ap + 40); state.pStatus.def = 0.6;
+            logEvent(`[TACTICAL DEFEND] Bertahan (+40 AP).`, 'player'); updateHUD(); endTurn('enemy');
+        }
+
+        function execItem(idx) {
+            state.turn = 'processing'; lockUI(); resolvePreTurn('player');
+            if(checkWin()) return; if(checkStun('player')) return endTurn('enemy');
+
+            let it = state.inventory[idx]; it.count--;
+            state.player.hp = Math.min(state.player.maxHp, state.player.hp + it.heal); state.player.ap = Math.min(state.player.maxAp, state.player.ap + it.ap);
+            logEvent(`[INVENTORY] Konsumsi ${it.name}.`, 'player');
+            if(it.heal > 0) floatTxt('player', `+${it.heal}`, '#10b981'); if(it.ap > 0) floatTxt('player', `+${it.ap} AP`, '#0ea5e9');
+            updateHUD(); endTurn('enemy');
+        }
+
+        function execSkill(idx) {
+            state.turn = 'processing'; lockUI(); resolvePreTurn('player');
+            if(checkWin()) return; if(checkStun('player')) return endTurn('enemy');
+
+            let sk = state.player.skills[idx];
+            if(sk.cost < 0) state.player.ap += sk.cost; else state.player.ap = Math.min(state.player.maxAp, state.player.ap + sk.cost);
+            
+            let hit = true; if(sk.type === 'heavy' && Math.random() > 0.75) hit = false; if(state.eStatus.def === 1) hit = false; 
+
+            logEvent(`[EXECUTE] ${sk.name}`, 'player');
+
+            if(!hit) { logEvent(`[EVADED] Target menghindar!`, 'system'); anim('p-sprite', 'anim-atk'); } 
+            else {
+                if(sk.dmg > 0) { 
+                    anim('p-sprite', 'anim-atk'); 
+                    setTimeout(() => spawnImpact('enemy', sk.type === 'heavy' ? 'burst' : 'slash'), 100);
+                    calcDamage('enemy', sk.dmg); 
+                }
+                else if(sk.dmg < 0) { let h = Math.abs(sk.dmg); state.player.hp = Math.min(state.player.maxHp, state.player.hp+h); floatTxt('player', `+${h}`, '#10b981'); }
+
+                if(sk.eff === 'defend') state.pStatus.def = 0.5; if(sk.eff === 'defend_heavy') state.pStatus.def = 0.9; if(sk.eff === 'evade') state.pStatus.def = 1;
+                if(sk.eff === 'stun') { state.eStatus.stun = 1; logEvent(`Target STUN!`, 'status'); }
+                if(sk.eff === 'dot') { state.eStatus.dot = 3; state.eStatus.dotDmg = 15; logEvent(`Target Bleed!`, 'status'); }
+                if(sk.eff === 'dot_heavy') { state.eStatus.dot = 3; state.eStatus.dotDmg = 35; logEvent(`Target Toxic!`, 'status'); }
+                if(sk.eff === 'drain') { let d = Math.min(25, state.enemy.ap); state.enemy.ap-=d; state.player.ap = Math.min(state.player.maxAp, state.player.ap+d); }
+                if(sk.eff === 'drain_heavy') { let d = Math.min(40, state.enemy.ap); state.enemy.ap-=d; state.player.ap = Math.min(state.player.maxAp, state.player.ap+d); }
+            }
+            updateHUD(); if(!checkWin()) endTurn('enemy');
+        }
+
+        function calcDamage(tStr, rDmg) {
+            let tg = tStr==='enemy'?state.enemy:state.player; let st = tStr==='enemy'?state.eStatus:state.pStatus; let fDmg = rDmg;
+            if(st.def > 0 && st.def < 1) { fDmg = Math.floor(rDmg * (1 - st.def)); anim(tStr==='enemy'?'e-sprite':'p-sprite', 'anim-block'); logEvent(`[BLOCK] DMG dikurangi jadi ${fDmg}.`, 'system'); }
+            if(Math.random() > 0.85) { fDmg = Math.floor(rDmg * 1.5); logEvent(`[CRITICAL]`, 'log-critical'); shakeScreen(); }
+            tg.hp = Math.max(0, tg.hp - fDmg);
+            if(st.def === 0) anim(tStr==='enemy'?'e-sprite':'p-sprite', 'anim-hit');
+            floatTxt(tStr, `-${fDmg}`, '#f43f5e');
+        }
+
+        function checkStun(str) {
+            let st = str==='player'?state.pStatus:state.eStatus; let nm = str==='player'?state.player.name:state.enemy.name;
+            if(st.stun > 0) { st.stun--; logEvent(`[STUNNED] ${nm} diam!`, 'status'); return true; } return false;
+        }
+
+        function lockUI() { document.querySelectorAll('button').forEach(b => b.disabled = true); }
+        function unlockUI() { document.querySelectorAll('.menu-btn').forEach(b => b.disabled = false); switchTab('main'); updateHUD(); }
+
+        function endTurn(nxt) {
+            setTimeout(() => {
+                state.turn = nxt;
+                if(nxt === 'enemy') enemyAI();
+                else { state.player.ap = Math.min(state.player.maxAp, state.player.ap + state.player.apRegen); unlockUI(); }
+            }, 1000);
+        }
+
+        // --- ENEMY AI (HARD - BALANCED) ---
+        function enemyAI() {
+            resolvePreTurn('enemy'); updateHUD();
+            if(checkWin()) return; if(checkStun('enemy')) return endTurn('player');
+
+            state.enemy.ap = Math.min(state.enemy.maxAp, state.enemy.ap + state.enemy.apRegen);
+            let ai = state.enemy.ai; let act = ''; let hpPct = state.enemy.hp / state.enemy.maxHp; let pAp = state.player.ap;
+
+            if (ai === 'survival') { if (hpPct < 0.3 && state.enemy.ap >= 50) act = 'heal'; else if (state.enemy.ap >= 90) act = 'nuke'; else act = 'atk'; } 
+            else if (ai === 'drainer') { if (pAp >= 60 && state.enemy.ap >= 40) act = 'drain'; else if (state.eStatus.dot === 0 && state.enemy.ap >= 50) act = 'stun'; else act = 'atk'; }
+            else if (ai === 'berserk') { if (state.pStatus.def > 0) act = 'buff'; else if (state.enemy.ap >= 60) act = 'heavy'; else act = 'atk'; }
+            else if (ai === 'technical') { if (state.pStatus.dot === 0 && state.enemy.ap >= 40) act = 'dot'; else if (hpPct < 0.4 && state.enemy.ap >= 40) act = 'evade'; else act = 'atk'; }
+            else { if (pAp < 20 && state.enemy.ap >= 90) act = 'nuke'; else if (state.enemy.ap >= 50 && Math.random()>0.5) act = 'heavy'; else act = 'atk'; }
+
+            anim('e-sprite', 'anim-atk-enemy');
+            
+            if (act === 'heal') { state.enemy.ap -= 50; state.enemy.hp = Math.min(state.enemy.maxHp, state.enemy.hp + 100); state.eStatus.def = 0.5; logEvent(`[BOSS] Heal +100 HP.`, 'enemy'); floatTxt('enemy', '+100', '#10b981'); }
+            else if (act === 'nuke') { state.enemy.ap -= 90; logEvent(`[BOSS] FATAL ATTACK!`, 'log-critical'); shakeScreen(); setTimeout(() => spawnImpact('player', 'burst'), 100); calcDamage('player', 100); }
+            else if (act === 'drain') { state.enemy.ap -= 40; state.player.ap = Math.max(0, state.player.ap-40); logEvent(`[BOSS] Curi 40 AP.`, 'enemy'); calcDamage('player', 25); }
+            else if (act === 'stun') { state.enemy.ap -= 50; state.pStatus.stun = 1; logEvent(`[BOSS] STUN Attack!`, 'status'); calcDamage('player', 20); }
+            else if (act === 'heavy') { state.enemy.ap -= 50; logEvent(`[BOSS] Heavy Attack.`, 'enemy'); setTimeout(() => spawnImpact('player', 'slash'), 100); calcDamage('player', 55); }
+            else if (act === 'dot') { state.enemy.ap -= 40; state.pStatus.dot = 3; state.pStatus.dotDmg = 20; logEvent(`[BOSS] DoT 20 DMG.`, 'status'); calcDamage('player', 15); }
+            else if (act === 'evade') { state.enemy.ap -= 40; state.eStatus.def = 1; logEvent(`[BOSS] Evade (100%).`, 'enemy'); }
+            else if (act === 'buff') { state.enemy.ap += 50; state.eStatus.def = 0.3; logEvent(`[BOSS] Buff (+50 AP).`, 'enemy'); }
+            else { state.enemy.ap -= 10; logEvent(`[BOSS] Normal Attack.`, 'enemy'); setTimeout(() => spawnImpact('player', 'slash'), 100); calcDamage('player', 30); }
+
+            updateHUD(); if(!checkWin()) endTurn('player');
+        }
+
+        initSelection();
+    </script>
+</body>
+</html>
